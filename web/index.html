@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AeroTrace · airworthiness directive check</title>
+<style>
+/* fonts bundled locally so the demo works without internet */
+@font-face{font-family:"Public Sans";font-weight:400;font-display:swap;src:url(/fonts/public-sans-latin-400-normal.woff2) format("woff2")}
+@font-face{font-family:"Public Sans";font-weight:500;font-display:swap;src:url(/fonts/public-sans-latin-500-normal.woff2) format("woff2")}
+@font-face{font-family:"Public Sans";font-weight:600;font-display:swap;src:url(/fonts/public-sans-latin-600-normal.woff2) format("woff2")}
+@font-face{font-family:"Public Sans";font-weight:700;font-display:swap;src:url(/fonts/public-sans-latin-700-normal.woff2) format("woff2")}
+@font-face{font-family:"Barlow Condensed";font-weight:500;font-display:swap;src:url(/fonts/barlow-condensed-latin-500-normal.woff2) format("woff2")}
+@font-face{font-family:"Barlow Condensed";font-weight:600;font-display:swap;src:url(/fonts/barlow-condensed-latin-600-normal.woff2) format("woff2")}
+@font-face{font-family:"Barlow Condensed";font-weight:700;font-display:swap;src:url(/fonts/barlow-condensed-latin-700-normal.woff2) format("woff2")}
+@font-face{font-family:"Source Serif 4";font-weight:200 900;font-display:swap;src:url(/fonts/source-serif-4-latin-wght-normal.woff2) format("woff2")}
+</style>
+<style>
+:root{
+  --sheet:#E6E9EB;      /* aluminium sheet */
+  --panel:#F4F6F7;
+  --ink:#1D2833;        /* slate ink */
+  --ink-2:#4A5866;
+  --rule:#C3CAD0;
+  --red:#C8102E;        /* unserviceable tag */
+  --yellow:#F2C230;     /* hold tag */
+  --green:#2F7A4D;      /* serviceable tag */
+  --zinc:#B5C065;       /* zinc-chromate primer: cited text */
+  --zinc-soft:#E3E8BE;
+  --grey:#8A949D;
+  --ui:"Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --tag:"Barlow Condensed", "Arial Narrow", sans-serif;
+  --doc:"Source Serif 4", Georgia, "Times New Roman", serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--sheet);color:var(--ink);font:400 16px/1.5 var(--ui)}
+button,input{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--ink);outline-offset:2px;box-shadow:0 0 0 6px var(--yellow)}
+a{color:inherit}
+
+/* ---------- top bar ---------- */
+.bar{display:flex;align-items:center;gap:28px;padding:14px 28px;background:var(--ink);color:#E8ECEF}
+.wordmark{font:700 1.65rem/1 var(--tag);letter-spacing:.02em;display:flex;align-items:center;gap:10px}
+.wordmark svg{width:26px;height:26px}
+.bar nav{display:flex;gap:4px;margin-left:8px}
+.bar nav button{background:none;border:0;color:#B9C3CB;padding:6px 12px;border-radius:4px;cursor:pointer;font-weight:500}
+.bar nav button[aria-current="page"]{color:#fff;background:rgba(255,255,255,.1)}
+.bar .corpus{margin-left:auto;font-size:.85rem;color:#B9C3CB;text-align:right}
+.bar .corpus b{color:#fff;font-weight:600}
+
+/* ---------- query form ---------- */
+.query{background:var(--panel);border-bottom:1px solid var(--rule);padding:18px 28px 16px}
+.query form{display:grid;grid-template-columns:minmax(260px,1fr) 150px 120px 120px auto;gap:10px;align-items:end;max-width:1400px}
+.query label{display:block;font-size:.8rem;font-weight:600;color:var(--ink-2);margin-bottom:4px}
+.query input{width:100%;height:46px;padding:0 14px;border:1.5px solid var(--rule);border-radius:6px;background:#fff}
+.query input#q{font-size:1.05rem}
+.query input:focus{border-color:var(--ink)}
+.query input::placeholder{color:#9AA4AD}
+.btn{height:46px;padding:0 22px;border:0;border-radius:6px;background:var(--ink);color:#fff;font-weight:600;cursor:pointer}
+.btn:hover{background:#2C3B49}
+.btn.ghost{background:transparent;color:var(--ink);border:1.5px solid var(--ink)}
+.understood{margin-top:10px;font-size:.88rem;color:var(--ink-2);min-height:1.4em}
+.understood span{display:inline-block;background:#fff;border:1px solid var(--rule);border-radius:4px;padding:1px 8px;margin:2px 4px 2px 0;color:var(--ink)}
+.understood em{font-style:normal;color:var(--ink-2)}
+
+/* ---------- layout ---------- */
+.layout{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(360px,1fr);gap:0;max-width:1600px}
+.results{padding:24px 28px 80px;min-width:0}
+.viewer{position:sticky;top:0;height:100vh;overflow:auto;background:#FBFBF9;border-left:1px solid var(--rule)}
+
+/* ---------- empty state ---------- */
+.intro{max-width:640px;padding:36px 0 0}
+.intro h1{font:600 2.6rem/1.08 var(--ui);letter-spacing:-.02em;margin:0 0 14px}
+.intro p{color:var(--ink-2);font-size:1.08rem;margin:0 0 26px;max-width:58ch}
+.examples{display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.examples button{background:#fff;border:1px solid var(--rule);border-radius:6px;padding:9px 14px;cursor:pointer;text-align:left}
+.examples button:hover{border-color:var(--ink)}
+.examples small{color:var(--ink-2);margin-left:8px}
+.tagrow{display:flex;gap:18px;margin:44px 0 0;flex-wrap:wrap}
+.legend{display:flex;gap:10px;align-items:center;font-size:.86rem;color:var(--ink-2);max-width:170px}
+
+/* ---------- answer ---------- */
+.answer{font-size:1.18rem;font-weight:600;margin:0 0 6px;max-width:70ch}
+.reasons{color:var(--ink-2);margin:0 0 16px;max-width:70ch}
+.notice{border:2px solid var(--red);background:#fff;border-radius:6px;padding:18px 20px;max-width:70ch}
+.notice h2{margin:0 0 6px;font:700 1.5rem/1.1 var(--tag);color:var(--red)}
+.notice.clarify{border-color:#B48A06}
+.notice.clarify h2{color:#7A5C00}
+.notice p{margin:0 0 6px}
+.followup{display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:#FFF7DA;border:1.5px solid var(--yellow);border-radius:6px;padding:12px 14px;margin:14px 0;max-width:70ch}
+.followup strong{flex:1 1 260px}
+.followup input{height:40px;width:150px;padding:0 10px;border:1.5px solid var(--rule);border-radius:6px;background:#fff}
+.followup .btn{height:40px}
+.count{font-size:.86rem;color:var(--ink-2);margin:16px 0 4px}
+
+/* ---------- record rows ---------- */
+.record{display:grid;grid-template-columns:132px minmax(0,1fr);gap:20px;padding:22px 0;border-top:1px solid var(--rule)}
+.record:first-of-type{border-top:0}
+.record h3{margin:0 0 4px;font-size:1.04rem;line-height:1.35;font-weight:600}
+.record h3 button{all:unset;cursor:pointer}
+.record h3 button:hover{text-decoration:underline}
+.meta{font-size:.85rem;color:var(--ink-2);margin:0 0 8px}
+.flags{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}
+.flag{font-size:.8rem;padding:2px 8px;border-radius:4px;border:1px solid var(--rule);background:#fff}
+.flag.warn{border-color:var(--red);color:var(--red)}
+.flag.ok{border-color:var(--green);color:var(--green)}
+.flag.hold{border-color:#B48A06;color:#6E5300;background:#FFF7DA}
+
+/* the tag: one bold element */
+.tag{--c:var(--red);--fg:#fff;position:relative;align-self:start;width:118px;min-height:150px;padding:34px 10px 12px;
+  background:var(--c);color:var(--fg);border-radius:5px;
+  clip-path:polygon(18% 0,82% 0,100% 12%,100% 100%,0 100%,0 12%);
+  transform:rotate(-2.5deg);transform-origin:50% 0;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08);
+  animation:hang .7s cubic-bezier(.3,1.6,.55,1) both;animation-delay:calc(var(--i,0) * 70ms)}
+.tag::before{content:"";position:absolute;top:11px;left:50%;width:14px;height:14px;margin-left:-7px;border-radius:50%;
+  background:var(--sheet);box-shadow:0 0 0 3px rgba(255,255,255,.55)}
+.tag b{display:block;font:700 1.55rem/0.98 var(--tag);letter-spacing:.01em}
+.tag small{display:block;margin-top:10px;font:600 .95rem/1.1 var(--tag);opacity:.9}
+.tag i{display:block;font:500 .82rem/1.2 var(--ui);font-style:normal;margin-top:6px;opacity:.88}
+.tag.red{--c:var(--red)}
+.tag.cond{--c:var(--red);background:repeating-linear-gradient(135deg,var(--red) 0 14px,#A40D26 14px 28px)}
+.tag.yellow{--c:var(--yellow);--fg:var(--ink)}
+.tag.green{--c:var(--green)}
+.tag.grey{--c:#6E7881;background:repeating-linear-gradient(-45deg,#6E7881 0 10px,#7C868F 10px 20px)}
+.tag.white{--c:#fff;--fg:var(--ink);box-shadow:inset 0 0 0 2px var(--ink)}
+.tag.blue{--c:#3E5C78}
+.tag.mini{width:66px;min-height:66px;padding:22px 5px 6px;animation:none;transform:rotate(-3deg)}
+.tag.mini::before{top:7px;width:9px;height:9px;margin-left:-4.5px;box-shadow:none}
+.tag.mini b{font-size:.92rem}
+@keyframes hang{0%{transform:rotate(-16deg);opacity:0}100%{transform:rotate(-2.5deg);opacity:1}}
+
+/* checklist */
+details{margin-top:4px}
+summary{cursor:pointer;font-weight:600;font-size:.92rem;color:var(--ink-2);list-style:none;display:inline-flex;gap:6px;align-items:center}
+summary::before{content:"";width:0;height:0;border:5px solid transparent;border-left:7px solid currentColor;transition:transform .15s}
+details[open]>summary::before{transform:rotate(90deg) translateX(2px)}
+.checks{list-style:none;margin:10px 0 0;padding:0}
+.checks li{display:grid;grid-template-columns:26px minmax(0,1fr);gap:10px;padding:8px 0;border-top:1px dashed var(--rule)}
+.mark{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font:700 .8rem/1 var(--ui);color:#fff;background:var(--grey)}
+.mark.pass{background:var(--green)} .mark.fail{background:var(--red)}
+.mark.unknown{background:var(--yellow);color:var(--ink)} .mark.warn{background:#fff;color:var(--red);box-shadow:inset 0 0 0 2px var(--red)}
+.mark.info{background:#fff;color:var(--ink-2);box-shadow:inset 0 0 0 1.5px var(--rule)}
+.checks .what{font-weight:600}
+.checks q{display:block;font:400 .95rem/1.5 var(--doc);color:var(--ink);quotes:"“" "”";margin:6px 0 2px;padding-left:10px;border-left:3px solid var(--zinc)}
+.src{background:none;border:0;padding:0;font-size:.82rem;color:var(--ink-2);text-decoration:underline;text-decoration-color:var(--zinc);text-decoration-thickness:2px;text-underline-offset:3px;cursor:pointer;text-align:left}
+.src:hover{color:var(--ink)}
+
+/* revision timeline: a real sequence */
+.chain{margin:14px 0 4px}
+.chain h4{margin:0 0 8px;font-size:.88rem;color:var(--ink-2);font-weight:600}
+.chain ol{display:flex;list-style:none;margin:0;padding:0;counter-reset:v}
+.chain li{flex:1;position:relative;padding-top:20px;min-width:0}
+.chain li::before{counter-increment:v;content:counter(v);position:absolute;top:0;left:0;width:18px;height:18px;border-radius:50%;
+  background:#fff;border:2px solid var(--grey);font:700 .7rem/14px var(--ui);text-align:center;color:var(--ink-2);z-index:1}
+.chain li::after{content:"";position:absolute;top:8px;left:18px;right:0;height:2px;background:var(--rule)}
+.chain li:last-child::after{display:none}
+.chain li.here::before{border-color:var(--ink);background:var(--ink);color:#fff}
+.chain li.latest::before{border-color:var(--green)}
+.chain button{all:unset;cursor:pointer;font-size:.8rem;display:block;padding-right:6px}
+.chain button:hover{text-decoration:underline}
+.chain small{display:block;color:var(--ink-2);font-size:.75rem}
+
+/* quotes */
+.quotes{margin-top:30px;padding-top:18px;border-top:2px solid var(--ink)}
+.quotes h2{font:700 1.4rem/1 var(--tag);margin:0 0 4px}
+.quotes>p{margin:0 0 12px;color:var(--ink-2);font-size:.9rem}
+.quote{margin:0 0 16px;max-width:72ch}
+.quote blockquote{margin:0 0 4px;font:400 1.02rem/1.6 var(--doc);padding-left:14px;border-left:3px solid var(--zinc)}
+
+/* ---------- source viewer ---------- */
+.viewer-empty{padding:40px 30px;color:var(--ink-2);max-width:42ch}
+.viewer-empty h2{font:700 1.5rem/1.1 var(--tag);color:var(--ink);margin:0 0 8px}
+.doc-head{position:sticky;top:0;background:#FBFBF9;padding:22px 30px 14px;border-bottom:1px solid var(--rule);z-index:2}
+.doc-head .id{font:700 1.3rem/1 var(--tag)}
+.doc-head h2{font:600 1.05rem/1.35 var(--doc);margin:6px 0 6px}
+.doc-head p{margin:0;font-size:.82rem;color:var(--ink-2)}
+.doc-body{padding:10px 30px 60px;font:400 1rem/1.68 var(--doc);max-width:70ch}
+.doc-body h3{font:600 .95rem/1.3 var(--ui);margin:26px 0 6px;display:flex;justify-content:space-between;gap:12px}
+.doc-body h3 span{font-weight:400;color:var(--ink-2);font-size:.78rem;white-space:nowrap}
+.doc-body p{margin:0 0 12px;white-space:pre-line}
+mark{background:var(--zinc-soft);box-shadow:0 0 0 2px var(--zinc-soft);border-bottom:2px solid var(--zinc);color:inherit;border-radius:2px}
+mark.now{animation:flash 1.2s ease-out}
+@keyframes flash{0%{background:var(--zinc)}100%{background:var(--zinc-soft)}}
+
+/* ---------- other views ---------- */
+.page{padding:30px 28px 80px;max-width:980px}
+.page h1{font:600 2rem/1.1 var(--ui);letter-spacing:-.01em;margin:0 0 10px}
+.page>p{color:var(--ink-2);max-width:62ch}
+.score{display:flex;gap:40px;margin:22px 0;align-items:baseline}
+.score div b{display:block;font:700 2.6rem/1 var(--tag)}
+.score div span{color:var(--ink-2);font-size:.88rem}
+table{border-collapse:collapse;width:100%;font-size:.9rem}
+th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--rule);vertical-align:top}
+th{font-weight:600;color:var(--ink-2)}
+td.ms{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.steps{counter-reset:s;list-style:none;padding:0;margin:20px 0}
+.steps li{counter-increment:s;display:grid;grid-template-columns:44px 1fr;gap:12px;padding:14px 0;border-top:1px solid var(--rule)}
+.steps li::before{content:counter(s);font:700 1.8rem/1 var(--tag);color:var(--ink-2)}
+.steps b{display:block;margin-bottom:2px}
+.hidden{display:none!important}
+.loading{opacity:.55;transition:opacity .2s}
+
+@media (max-width:1000px){
+  .layout{grid-template-columns:1fr}
+  .viewer{position:relative;height:auto;max-height:none;border-left:0;border-top:2px solid var(--ink)}
+  .query form{grid-template-columns:1fr 1fr 1fr}
+  .query .qwrap{grid-column:1/-1}
+  .query .btn{grid-column:1/-1}
+  .bar{flex-wrap:wrap;gap:12px}
+  .bar .corpus{margin-left:0;text-align:left;width:100%}
+}
+@media (max-width:560px){
+  .record{grid-template-columns:1fr}
+  .intro h1{font-size:2rem}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important}
+}
+</style>
+</head>
+<body>
+<header class="bar">
+  <div class="wordmark" aria-label="AeroTrace">
+    <svg viewBox="0 0 32 32" aria-hidden="true"><path fill="#F2C230" d="M6 3h20l4 5v21H2V8z"/><circle cx="16" cy="9" r="2.6" fill="#1D2833"/><path d="M9 17h14M9 22h9" stroke="#1D2833" stroke-width="2.4" stroke-linecap="round"/></svg>
+    AeroTrace
+  </div>
+  <nav aria-label="Views">
+    <button data-view="search" aria-current="page">Check an aircraft</button>
+    <button data-view="tests">Try to break it</button>
+    <button data-view="how">How it works</button>
+  </nav>
+  <div class="corpus" id="corpus">Loading corpus…</div>
+</header>
+
+<!-- ================= search view ================= -->
+<section id="view-search">
+  <div class="query">
+    <form id="form" autocomplete="off">
+      <div class="qwrap"><label for="q">Question</label>
+        <input id="q" name="q" placeholder="Does the Gulfstream GV-SP directive apply to S/N 5064?"></div>
+      <div><label for="make">Manufacturer</label><input id="make" name="make" placeholder="Any"></div>
+      <div><label for="model">Model</label><input id="model" name="model" placeholder="Any"></div>
+      <div><label for="serial">Serial number</label><input id="serial" name="serial" placeholder="Optional"></div>
+      <button class="btn" type="submit">Check</button>
+    </form>
+    <div class="understood" id="understood" aria-live="polite"></div>
+  </div>
+
+  <div class="layout">
+    <div class="results" id="results" aria-live="polite">
+      <div class="intro">
+        <h1>Which aircraft are you working on?</h1>
+        <p>AeroTrace checks 431 FAA airworthiness directive proposals against your manufacturer, model and serial number.
+          Every finding is quoted from the source document. When the documents don't settle it, you get told why.</p>
+        <div class="examples" id="examples"></div>
+        <div class="tagrow" aria-label="What the tags mean">
+          <div class="legend"><div class="tag red mini"><b>Act</b></div>Directive applies to this aircraft</div>
+          <div class="legend"><div class="tag yellow mini"><b>Hold</b></div>A fact is missing. You'll be asked for it</div>
+          <div class="legend"><div class="tag green mini"><b>OK</b></div>Not affected, with the reason quoted</div>
+          <div class="legend"><div class="tag grey mini"><b>Void</b></div>Proposal was withdrawn</div>
+        </div>
+      </div>
+    </div>
+    <aside class="viewer" id="viewer" aria-label="Source document">
+      <div class="viewer-empty">
+        <h2>Source document</h2>
+        <p>Select any citation and the original Federal Register text opens here, with the exact sentence highlighted.</p>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= tests view ================= -->
+<section id="view-tests" class="hidden">
+  <div class="page">
+    <h1>Try to break it</h1>
+    <p>These are the questions most likely to make an AI system guess: serial numbers one past the end of a range,
+      withdrawn proposals, aircraft that aren't in the data, a model paired with the wrong manufacturer. Run them, then
+      type your own on the first tab.</p>
+    <button class="btn" id="run-tests">Run all checks</button>
+    <div id="test-out"></div>
+  </div>
+</section>
+
+<!-- ================= how view ================= -->
+<section id="view-how" class="hidden">
+  <div class="page">
+    <h1>How an answer is made</h1>
+    <p>The language model never writes the answer. Code decides applicability, and every sentence you read is copied
+      from the documents.</p>
+    <ol class="steps">
+      <li><div><b>Read the question</b>Rules pick out manufacturer, model, serial number and record, docket or AD numbers.
+        If Claude is switched on, it may fill gaps, but only with words that appear in your question.</div></li>
+      <li><div><b>Stop if it can't be answered</b>Unknown records, manufacturers or models outside the corpus, a model paired
+        with the wrong manufacturer, or a model shared by several manufacturers all stop here with the reason.</div></li>
+      <li><div><b>Check applicability in code</b>Each document's applicability paragraph is parsed into models, serial ranges,
+        exclusions and conditions. The tag is the result of those checks, and each check shows its sentence.</div></li>
+      <li><div><b>Follow the revision chain</b>If a docket has several records, older ones are marked outdated. If the latest
+        one is a withdrawal, earlier proposals are marked withdrawn too.</div></li>
+      <li><div><b>Quote, don't paraphrase</b>Answers are sentences copied from the corpus with record, docket, Federal
+        Register page and section. Claude can only choose which sentences to show.</div></li>
+    </ol>
+    <p id="how-corpus"></p>
+  </div>
+</section>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+const TAGS = {
+  "APPLIES":                        ["red",   "Action required", "Directive applies"],
+  "APPLIES IF CONDITION MET":       ["cond",  "Applies if…",     "A condition needs checking"],
+  "CANNOT DETERMINE - NEED INFO":   ["yellow","Hold",            "Need more information"],
+  "UNVERIFIED - SUMMARY ONLY":      ["white", "Not verified",    "Only the summary is indexed"],
+  "WITHDRAWN PROPOSAL":             ["grey",  "Withdrawn",       "No longer proposed"],
+  "DOES NOT APPLY":                 ["green", "Not affected",    "Reason quoted"],
+  "MATCHED BY TOPIC (applicability not evaluated)": ["blue","Topic match","No aircraft given"],
+};
+const MARK = {pass:"✓", fail:"✕", unknown:"?", warn:"!", info:"i"};
+const EXAMPLES = [
+  ["Which ADs apply to a Bombardier DHC-8-400?", "asks for the serial number"],
+  ["Bombardier DHC-8-400 S/N 4082", "one past the end of a range"],
+  ["Robinson R22 S/N 0100", "in range, but the docket was withdrawn"],
+  ["What does NPRM-302 require?", "an outdated version"],
+  ["Boeing A330 fuel tank inspection", "wrong manufacturer"],
+  ["What ADs apply to the Comac C919?", "not in the corpus"],
+];
+
+let corpus = null;
+const VIEWER_EMPTY = `<div class="viewer-empty"><h2>Source document</h2><p>Nothing to show for this question.
+  Select any citation and the original Federal Register text opens here, with the exact sentence highlighted.</p></div>`;
+
+/* ---------- views ---------- */
+document.querySelectorAll(".bar nav button").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll(".bar nav button").forEach(x => x.removeAttribute("aria-current"));
+  b.setAttribute("aria-current", "page");
+  ["search","tests","how"].forEach(v => $("#view-"+v).classList.toggle("hidden", v !== b.dataset.view));
+}));
+
+/* ---------- corpus ---------- */
+fetch("/api/corpus").then(r => r.json()).then(c => {
+  corpus = c;
+  $("#corpus").innerHTML = `<b>${c.records}</b> FAA proposals, <b>${c.full_text}</b> in full text<br>` +
+    `${c.pages_total.toLocaleString()} Federal Register pages${c.llm ? ", Claude on" : ""}`;
+  $("#how-corpus").textContent = `Corpus: ${c.records} proposed directives covering ${c.pages_total.toLocaleString()} ` +
+    `Federal Register pages. ${c.full_text} are indexed in full text (${c.pages_fulltext} pages) and ${c.summary_only} ` +
+    `by summary only, ${c.chunks.toLocaleString()} passages in all. Records indexed by summary only are never marked as applying.`;
+});
+
+$("#examples").innerHTML = EXAMPLES.map(([q, why]) =>
+  `<button type="button" data-q="${esc(q)}">${esc(q)}<small>${esc(why)}</small></button>`).join("");
+$("#examples").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  $("#q").value = b.dataset.q; ["make","model","serial"].forEach(k => $("#"+k).value = "");
+  ask();
+});
+
+/* ---------- ask ---------- */
+$("#form").addEventListener("submit", e => { e.preventDefault(); ask(); });
+$("#q").addEventListener("input", () => { /* a new question starts fresh */ });
+
+async function ask() {
+  const body = {q: $("#q").value, make: $("#make").value, model: $("#model").value, serial: $("#serial").value};
+  if (!body.q.trim() && !body.make && !body.model && !body.serial) return;
+  $("#results").classList.add("loading");
+  const res = await fetch("/api/ask", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body)}).then(r => r.json());
+  $("#results").classList.remove("loading");
+  render(res);
+}
+
+function understood(res) {
+  const p = res.query, bits = [];
+  if (p.makes.length) bits.push(["manufacturer", p.makes.join(", ")]);
+  if (p.models.length) bits.push(["model", p.models.join(", ")]);
+  if (p.serial) bits.push(["serial", p.serial]);
+  const ids = [...p.record_ids, ...p.dockets, ...p.ad_numbers.map(a => "AD " + a)];
+  if (ids.length) bits.push(["record", ids.join(", ")]);
+  if (p.topic_terms.length) bits.push(["topic", p.topic_terms.join(", ")]);
+  $("#understood").innerHTML = (bits.length ? "Understood as " + bits.map(([k,v]) => `<span><em>${k}</em> ${esc(v)}</span>`).join("") : "Nothing specific recognised")
+    + ` <em>in ${res.latency_ms} ms</em>`;
+}
+
+function render(res) {
+  understood(res);
+  const out = [];
+  if (res.status === "refuse" || res.status === "clarify") {
+    const c = res.status === "clarify";
+    out.push(`<div class="notice ${c ? "clarify" : ""}"><h2>${c ? "Which one do you mean?" : "Can't answer this"}</h2>
+      <p>${esc(res.message)}</p>${res.reasons.map(r => `<p class="reasons">${esc(r)}</p>`).join("")}</div>`);
+    $("#results").innerHTML = out.join("");
+    $("#viewer").innerHTML = VIEWER_EMPTY;
+    return;
+  }
+  out.push(`<p class="answer">${esc(headline(res))}</p>`);
+  if (res.reasons.length) out.push(res.reasons.map(r => `<p class="reasons">${esc(r)}</p>`).join(""));
+
+  for (const n of res.needs) {
+    const label = n.field === "serial" ? "What's the serial number?" : "Which model?";
+    out.push(`<form class="followup" data-field="${n.field}"><strong>${label} It decides ${n.records.length} record${n.records.length>1?"s":""}.</strong>
+      <input aria-label="${n.field}" placeholder="${n.field === "serial" ? "e.g. 2519" : "e.g. R22"}"><button class="btn" type="submit">Re-check</button></form>`);
+  }
+  if (res.total_matches > res.cards.length)
+    out.push(`<p class="count">Showing ${res.cards.length} of ${res.total_matches} matching records, most relevant first.</p>`);
+
+  res.cards.forEach((c, i) => out.push(card(c, i, res.cards.length <= 3)));
+
+  if (res.passages.length) {
+    out.push(`<section class="quotes"><h2>Quoted from the documents</h2><p>Copied word for word. Select a citation to see it in context.</p>`);
+    for (const p of res.passages)
+      out.push(`<div class="quote"><blockquote>${esc(p.text)}</blockquote>${srcBtn(p.record_id, p.cite, p.text)}</div>`);
+    out.push(`</section>`);
+  }
+  $("#results").innerHTML = out.join("");
+  const pri = ["APPLIES","APPLIES IF CONDITION MET","CANNOT DETERMINE - NEED INFO","WITHDRAWN PROPOSAL","DOES NOT APPLY"];
+  const first = pri.map(v => res.cards.find(c => c.verdict === v)).find(Boolean) || res.cards[0];
+  if (first) openSource(first.record_id, firstEvidence(first));
+}
+
+function headline(res) {
+  const n = res.counts || {}, total = res.total_matches || 0;
+  if (res.query.record_ids.length || res.query.dockets.length || res.query.ad_numbers.length) return res.message;
+  if (!(res.query.makes.length || res.query.models.length || res.query.serial)) return res.message;
+  const parts = [];
+  const act = (n["APPLIES"] || 0), cond = (n["APPLIES IF CONDITION MET"] || 0);
+  if (act) parts.push(`${act} appl${act>1?"y":"ies"}`);
+  if (cond) parts.push(`${cond} appl${cond>1?"y":"ies"} if a condition is met`);
+  if (n["CANNOT DETERMINE - NEED INFO"]) parts.push(`${n["CANNOT DETERMINE - NEED INFO"]} on hold for more information`);
+  if (n["UNVERIFIED - SUMMARY ONLY"]) parts.push(`${n["UNVERIFIED - SUMMARY ONLY"]} can't be verified`);
+  if (n["WITHDRAWN PROPOSAL"]) parts.push(`${n["WITHDRAWN PROPOSAL"]} withdrawn`);
+  if (n["DOES NOT APPLY"]) parts.push(`${n["DOES NOT APPLY"]} not affecting this aircraft`);
+  return `Checked ${total} record${total>1?"s":""}: ${parts.join(", ")}.`;
+}
+
+function firstEvidence(c) {
+  // jump to the sentence that decided the verdict: a failed check first, then serial, then model
+  const own = c.steps.filter(s => s.evidence && s.cite && s.cite.startsWith(c.record_id + " "));
+  const pick = own.find(s => s.result === "fail") || own.find(s => s.check === "Serial number")
+            || own.find(s => s.check === "Model") || own.find(s => s.result === "unknown") || own[0];
+  return pick ? pick.evidence : null;
+}
+
+function srcBtn(rid, cite, ev) {
+  return `<button class="src" data-rid="${esc(rid)}" data-ev="${esc(ev || "")}">${esc(cite)}</button>`;
+}
+
+function card(c, i, open) {
+  const [cls, big, sub] = TAGS[c.verdict] || ["blue", c.verdict, ""];
+  const flags = [];
+  flags.push(c.is_proposal ? `<span class="flag hold">Proposed rule, not a final AD</span>` : `<span class="flag ok">Final AD ${esc(c.ad_number)}</span>`);
+  if (c.revision) {
+    const r = c.revision;
+    flags.push(r.is_latest ? `<span class="flag ok">Latest version (${r.version} of ${r.total})</span>`
+      : `<span class="flag warn">Outdated: version ${r.version} of ${r.total}. Latest is ${esc(r.latest_record)}</span>`);
+  }
+  if (c.supersedes_ad) flags.push(`<span class="flag">Replaces AD ${esc(c.supersedes_ad)}</span>`);
+  if (c.text_source === "summary_only") flags.push(`<span class="flag">Summary only</span>`);
+
+  const steps = c.steps.map(s => `<li><span class="mark ${s.result}" aria-label="${s.result}">${MARK[s.result] || "•"}</span>
+    <div><span class="what">${esc(s.check)}.</span> ${esc(s.detail)}
+    ${s.evidence ? `<q>${esc(s.evidence.slice(0, 600))}</q>` : ""}
+    ${s.cite ? srcBtn(s.cite.split(" · ")[0], s.cite, s.evidence) : ""}</div></li>`).join("");
+
+  let chain = "";
+  if (c.revision) {
+    chain = `<div class="chain"><h4>Revision history, docket ${esc(c.revision.docket)}</h4><ol>` +
+      c.revision.members.map(m => `<li class="${m.record_id === c.record_id ? "here" : ""} ${m.status === "latest" ? "latest" : ""}">
+        <button class="src-rec" data-rid="${esc(m.record_id)}">${esc(m.record_id)}</button>
+        <small>${esc(m.publish_date)}${m.status === "latest" ? ", latest" : ""}</small></li>`).join("") + `</ol></div>`;
+  }
+  return `<article class="record">
+    <div class="tag ${cls}" style="--i:${i}"><b>${big}</b><small>${esc(c.record_id)}</small><i>${sub}</i></div>
+    <div>
+      <h3><button data-rid="${esc(c.record_id)}" class="src-rec">${esc(c.subject)}</button></h3>
+      <p class="meta">${esc(c.make.slice(0, 80))}, published ${esc(c.publish_date)}. Docket ${esc(c.docket)}</p>
+      <div class="flags">${flags.join("")}</div>
+      <details ${open ? "open" : ""}><summary>How this was decided</summary><ul class="checks">${steps}</ul>${chain}</details>
+    </div></article>`;
+}
+
+/* follow-up + source clicks (delegated) */
+$("#results").addEventListener("submit", e => {
+  const f = e.target.closest(".followup"); if (!f) return;
+  e.preventDefault();
+  const v = f.querySelector("input").value.trim(); if (!v) return;
+  $("#" + f.dataset.field).value = v; ask();
+});
+$("#results").addEventListener("click", e => {
+  const b = e.target.closest(".src, .src-rec"); if (!b) return;
+  openSource(b.dataset.rid, b.dataset.ev || null);
+});
+$("#viewer").addEventListener("click", e => {
+  const b = e.target.closest(".src-rec"); if (b) openSource(b.dataset.rid, null);
+});
+
+/* ---------- source viewer ---------- */
+const sourceCache = {};
+async function openSource(rid, evidence) {
+  const doc = sourceCache[rid] || (sourceCache[rid] = await fetch("/api/source/" + encodeURIComponent(rid)).then(r => r.json()));
+  const norm = s => s.replace(/\s+/g, " ").trim();
+  const ev = evidence ? norm(evidence) : null;
+  let marked = false;
+  const sections = doc.sections.map(s => {
+    const paras = s.paras.map(p => {
+      let t = esc(norm(p.text));
+      if (ev && !marked) {
+        for (const probe of [ev, ev.slice(0, 120), ev.slice(0, 60)]) {
+          const e2 = esc(probe);
+          const at = t.indexOf(e2);
+          if (probe.length > 20 && at >= 0) {
+            const len = probe === ev ? e2.length : Math.min(t.length - at, esc(ev).length);
+            t = t.slice(0, at) + `<mark class="now" id="hit">` + t.slice(at, at + len) + `</mark>` + t.slice(at + len);
+            marked = true; break;
+          }
+        }
+      }
+      return `<p>${t}</p>`;
+    }).join("");
+    const label = s.section && s.section.length === 1 ? `§(${s.section})${s.title ? " " + esc(s.title) : ""}` : esc(s.title);
+    return `<h3>${label}<span>${esc(s.cite.split(" · ").slice(2, 3).join(""))}</span></h3>${paras}`;
+  }).join("");
+  $("#viewer").innerHTML = `<div class="doc-head"><div class="id">${esc(doc.record_id)}</div>
+      <h2>${esc(doc.subject)}</h2>
+      <p>${esc(doc.citation)}${doc.text_source === "summary_only" ? ". Only the summary is indexed for this record." : ""}
+      ${doc.fr_link ? ` <a href="${esc(doc.fr_link)}" target="_blank" rel="noopener">Open on federalregister.gov</a>` : ""}</p></div>
+    <div class="doc-body">${sections || "<p>No text indexed.</p>"}</div>`;
+  const hit = $("#hit");
+  const v = $("#viewer"), smooth = !matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const scrolls = v.scrollHeight > v.clientHeight + 4 && getComputedStyle(v).position === "sticky";
+  if (hit && scrolls) v.scrollTo({top: hit.offsetTop - v.clientHeight / 2, behavior: smooth ? "smooth" : "auto"});
+  else v.scrollTop = 0;
+}
+
+/* ---------- tests ---------- */
+$("#run-tests").addEventListener("click", async () => {
+  $("#test-out").innerHTML = `<p>Running…</p>`;
+  const rows = await fetch("/api/tests").then(r => r.json());
+  const passed = rows.filter(r => r.pass).length, slow = Math.max(...rows.map(r => r.latency_ms));
+  $("#test-out").innerHTML = `<div class="score">
+      <div><b>${passed} of ${rows.length}</b><span>checks passed</span></div>
+      <div><b>${slow.toFixed(0)} ms</b><span>slowest answer (limit 3,000 ms)</span></div></div>
+    <table><thead><tr><th></th><th>Trap</th><th>Question asked</th><th>What happened</th><th class="ms">Time</th></tr></thead><tbody>
+    ${rows.map(r => `<tr><td><div class="tag mini ${r.pass ? "green" : "red"}"><b>${r.pass ? "Pass" : "Fail"}</b></div></td>
+      <td>${esc(r.test)}</td><td>${esc(r.question)}</td><td>${esc(r.detail)}</td><td class="ms">${r.latency_ms} ms</td></tr>`).join("")}
+    </tbody></table>`;
+});
+</script>
+</body>
+</html>

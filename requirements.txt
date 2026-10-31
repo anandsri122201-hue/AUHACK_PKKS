@@ -1,0 +1,7 @@
+pandas>=2.0
+openpyxl>=3.1
+requests>=2.31
+streamlit>=1.36
+anthropic>=0.40
+fastapi>=0.110
+uvicorn>=0.29
